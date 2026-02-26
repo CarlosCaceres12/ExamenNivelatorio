@@ -4,6 +4,7 @@ const searchInput = document.getElementById("searchInput");
 
 let departments = [];
 
+// Carga inicial de departamentos
 async function loadDepartments() {
   try {
     const res = await fetch("https://api-colombia.com/api/v1/Department");
@@ -14,6 +15,7 @@ async function loadDepartments() {
   }
 }
 
+// Renderiza las tarjetas en la columna izquierda
 function renderCards(data) {
   container.innerHTML = "";
 
@@ -41,10 +43,14 @@ function renderCards(data) {
   });
 }
 
+// Muestra el detalle del departamento y prepara la lista de municipios
 async function showDetail(id) {
   try {
     const res = await fetch(`https://api-colombia.com/api/v1/Department/${id}`);
     const dep = await res.json();
+
+    const citiesres = await fetch(`https://api-colombia.com/api/v1/Department/${id}/cities`);
+    const cities = await citiesres.json();
 
     const imagePath = `images/departments/${id}.jpg`;
 
@@ -57,13 +63,39 @@ async function showDetail(id) {
           onerror="this.src='images/departments/default.jpg'"
         >
         <h2>${dep.name}</h2>
-        <p><strong>Capital:</strong> ${dep.cityCapital?.name || "No disponible"}</p>
-        <p><strong>Población:</strong> ${dep.population ? dep.population.toLocaleString() : "No disponible"}</p>
-        <p><strong>Superficie:</strong> ${dep.surface ? dep.surface + " km²" : "No disponible"}</p>
-        <p>${dep.description || ""}</p>
+        <div class="stats-grid">
+          <p><strong>Capital:</strong> ${dep.cityCapital?.name || "No disponible"}</p>
+          <p><strong>Población:</strong> ${dep.population ? dep.population.toLocaleString() : "No disponible"}</p>
+          <p><strong>Superficie:</strong> ${dep.surface ? dep.surface.toLocaleString() + " km²" : "No disponible"}</p>
+        </div>
+        <p class="description">${dep.description || ""}</p>
+        
+        <hr>
+
+        <div class="municipios-section">
+          <h3>Municipios (${cities.length})</h3>
+          <input type="text" id="municipioSearch" placeholder="🔍 Filtrar municipios..." class="mun-search-input">
+          
+          <div id="municipiosList" class="municipios-list">
+            ${cities.map(city => `
+              <div class="municipio-item" data-id="${city.id}">
+                <div class="municipio-header">
+                  ${city.name}
+                  <span class="icon">▼</span>
+                </div>
+                <div id="municipio-${city.id}" class="municipio-body"></div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
       </div>
     `;
-  } catch {
+
+    // Activar funciones de interacción
+    activarEventosMunicipios();
+    activarBuscadorMunicipios();
+
+  } catch (error) {
     detail.innerHTML = "<p>Error al cargar detalle.</p>";
   }
 }
@@ -76,42 +108,43 @@ function activarEventosMunicipios() {
 
   items.forEach(item => {
     item.addEventListener("click", async function () {
-
       const id = this.dataset.id;
       const body = document.getElementById(`municipio-${id}`);
 
-      // Cerrar otros
+      // Cerrar otros municipios abiertos
       document.querySelectorAll(".municipio-body").forEach(b => {
-        if (b !== body) {
-          b.classList.remove("active");
-        }
+        if (b !== body) b.classList.remove("active");
       });
 
-      // Si ya cargó contenido → solo alternar
-      if (body.innerHTML !== "") {
-        body.classList.toggle("active");
+      // Si ya está activo, cerrarlo y salir
+      if (body.classList.contains("active")) {
+        body.classList.remove("active");
         return;
       }
 
-      body.innerHTML = "<p>Cargando...</p>";
-      body.classList.add("active");
+      // Si el contenido está vacío, llamar a la API (Cache)
+      if (body.innerHTML === "") {
+        body.innerHTML = "<p>Cargando datos...</p>";
+        body.classList.add("active");
 
-      try {
-        const res = await fetch(`https://api-colombia.com/api/v1/City/${id}`);
-        const city = await res.json();
+        try {
+          const res = await fetch(`https://api-colombia.com/api/v1/City/${id}`);
+          const city = await res.json();
 
-        body.innerHTML = `
-          <div class="municipio-info">
-            <p><strong>Descripción:</strong> ${city.description || "No disponible"}</p>
-            <p><strong>Población:</strong> ${city.population ? city.population.toLocaleString() : "No disponible"}</p>
-            <p><strong>Superficie:</strong> ${city.surface ? city.surface + " km²" : "No disponible"}</p>
-            <p><strong>Código postal:</strong> ${city.postalCode || "No disponible"}</p>
-          </div>
-        `;
-      } catch {
-        body.innerHTML = "<p>Error al cargar municipio.</p>";
+          body.innerHTML = `
+            <div class="municipio-info">
+              <p><strong>Descripción:</strong> ${city.description || "No disponible"}</p>
+              <p><strong>Población:</strong> ${city.population ? city.population.toLocaleString() : "No disponible"}</p>
+              <p><strong>Superficie:</strong> ${city.surface ? city.surface.toLocaleString() + " km²" : "No disponible"}</p>
+              <p><strong>Código postal:</strong> ${city.postalCode || "No disponible"}</p>
+            </div>
+          `;
+        } catch {
+          body.innerHTML = "<p>Error al cargar municipio.</p>";
+        }
+      } else {
+        body.classList.add("active");
       }
-
     });
   });
 }
@@ -123,23 +156,17 @@ function activarBuscadorMunicipios() {
   const input = document.getElementById("municipioSearch");
   const items = document.querySelectorAll(".municipio-item");
 
+  if(!input) return;
+
   input.addEventListener("input", function () {
     const value = this.value.toLowerCase();
 
     items.forEach(item => {
-      const nombre = item
-        .querySelector(".municipio-header")
-        .textContent
-        .toLowerCase();
-
-      if (nombre.includes(value)) {
-        item.style.display = "block";
-      } else {
-        item.style.display = "none";
-      }
+      const nombre = item.querySelector(".municipio-header").textContent.toLowerCase();
+      item.style.display = nombre.includes(value) ? "block" : "none";
     });
   });
 }
 
+// Iniciar aplicación
 loadDepartments();
-
